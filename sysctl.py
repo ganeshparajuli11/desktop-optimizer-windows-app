@@ -14,12 +14,12 @@ import psutil
 
 try:
     import ctypes
-except Exception:
+except ImportError:
     ctypes = None
 
 try:
     import winsound
-except Exception:
+except ImportError:
     winsound = None
 
 try:
@@ -60,6 +60,16 @@ HIGH_IMPACT = "#ff6b6b"
 HISTORY       = 90
 MAX_ROWS      = 60
 ALERT_COOL    = 60
+APP_STATE_DIR_NAME = "SysCtl"
+MIN_BACKGROUND_APP_MB = 40
+MAX_DAILY_CPU_SAMPLES = 800
+STATE_FLUSH_INTERVAL_SEC = 45
+CPU_OPT_PRESET_APPS = ["discord", "spotify", "steam", "epic"]
+BG_PRESETS = {
+    "Work Focus": ["discord", "telegram", "slack", "steam", "epic"],
+    "Gaming Focus": ["overlay", "updater", "onedrive", "dropbox", "teams"],
+    "Battery Saver": ["onedrive", "dropbox", "steam", "epic", "spotify"],
+}
 
 
 # ══════════════════════════════════════════════
@@ -306,7 +316,7 @@ class App(ctk.CTk):
             "chrome.exe": "Google Chrome", "msedge.exe": "Microsoft Edge", "dropbox.exe": "Dropbox"
         }
 
-        self._state_dir = Path(os.environ.get("APPDATA", str(Path.home()))) / "SysCtl"
+        self._state_dir = Path(os.environ.get("APPDATA", str(Path.home()))) / APP_STATE_DIR_NAME
         self._state_file = self._state_dir / "sysctl_state.json"
         self._state = self._default_state()
         self._load_state()
@@ -419,10 +429,12 @@ class App(ctk.CTk):
         self._save_state()
 
     def _notify(self, title, message):
+        safe_title = str(title).replace("'", "''")
+        safe_message = str(message).replace("'", "''")
         ps = (f"Add-Type -AssemblyName System.Windows.Forms;"
               f"$n=New-Object System.Windows.Forms.NotifyIcon;"
               f"$n.Icon=[System.Drawing.SystemIcons]::Information;$n.Visible=$true;"
-              f"$n.ShowBalloonTip(7000,'{title}','{message}',"
+              f"$n.ShowBalloonTip(7000,'{safe_title}','{safe_message}',"
               f"[System.Windows.Forms.ToolTipIcon]::Info);Start-Sleep 8;$n.Dispose()")
         threading.Thread(target=lambda: subprocess.run(
             ["powershell", "-WindowStyle", "Hidden", "-Command", ps], capture_output=True
@@ -1151,7 +1163,7 @@ class App(ctk.CTk):
                 self._set_power("Balanced" if mode == "Balanced" else "High performance")
                 changed.append("Adjusted power plan for performance")
             if mode == "Aggressive":
-                closed = self._stop_background_group(["discord", "spotify", "steam", "epic"], silent=True)
+                closed = self._stop_background_group(CPU_OPT_PRESET_APPS, silent=True)
                 if closed:
                     changed.append(f"Closed {closed} heavy background app(s)")
                     self._add_daily_apps_closed(closed)
@@ -1230,7 +1242,7 @@ class App(ctk.CTk):
                 if not nm or self._is_system_critical(nm):
                     continue
                 rss = (p.info["memory_info"].rss / 1048576.0) if p.info.get("memory_info") else 0.0
-                if rss < 40 and "update" not in nm.lower() and "launcher" not in nm.lower():
+                if rss < MIN_BACKGROUND_APP_MB and "update" not in nm.lower() and "launcher" not in nm.lower():
                     continue
                 items.append({"pid": p.info["pid"], "name": nm, "ram": rss})
             except Exception:
@@ -1370,12 +1382,7 @@ class App(ctk.CTk):
         return count
 
     def _apply_bg_preset(self, preset):
-        mapping = {
-            "Work Focus": ["discord", "telegram", "slack", "steam", "epic"],
-            "Gaming Focus": ["overlay", "updater", "onedrive", "dropbox", "teams"],
-            "Battery Saver": ["onedrive", "dropbox", "steam", "epic", "spotify"],
-        }
-        keys = mapping.get(preset, [])
+        keys = BG_PRESETS.get(preset, [])
         def run():
             closed = self._stop_background_group(keys)
             self._add_daily_apps_closed(closed)
@@ -1444,7 +1451,7 @@ class App(ctk.CTk):
 
     def _assistant_meeting(self):
         def run():
-            closed = self._stop_background_group(["discord", "telegram", "slack", "steam", "epic"], silent=True)
+            closed = self._stop_background_group(BG_PRESETS.get("Work Focus", []), silent=True)
             self._add_daily_apps_closed(closed)
             self._refresh_background_apps()
             self._start_focus_session(45)
@@ -1506,8 +1513,8 @@ class App(ctk.CTk):
         daily = self._state.setdefault("daily_summary", {})
         samples = daily.setdefault("cpu_samples", [])
         samples.append(float(value))
-        if len(samples) > 800:
-            samples[:] = samples[-800:]
+        if len(samples) > MAX_DAILY_CPU_SAMPLES:
+            samples[:] = samples[-MAX_DAILY_CPU_SAMPLES:]
         self._recompute_daily_sentence()
 
     def _cpu_stability_text(self):
@@ -1559,7 +1566,7 @@ class App(ctk.CTk):
                 if now - self._last_bg_refresh > 10:
                     self._last_bg_refresh = now
                     self.after(0, self._refresh_background_apps)
-                if now - self._last_state_flush > 45:
+                if now - self._last_state_flush > STATE_FLUSH_INTERVAL_SEC:
                     self._last_state_flush = now
                     self._save_state()
                 self.after(0, self._update_home_cards)
