@@ -61,7 +61,12 @@ HISTORY       = 90
 MAX_ROWS      = 60
 ALERT_COOL    = 60
 APP_STATE_DIR_NAME = "SysCtl"
+MAX_CPU_SAMPLES_HISTORY = 1200
+FALLBACK_CPU_SAMPLE_COUNT = 20
 MIN_BACKGROUND_APP_MB = 40
+MAX_BACKGROUND_APP_DISPLAY = 40
+MAX_APP_NAME_DISPLAY_LENGTH = 28
+BACKGROUND_NAME_HINTS = ["update", "launcher"]
 MAX_DAILY_CPU_SAMPLES = 800
 STATE_FLUSH_INTERVAL_SEC = 45
 CPU_OPT_PRESET_APPS = ["discord", "spotify", "steam", "epic"]
@@ -299,7 +304,7 @@ class App(ctk.CTk):
         self._thr       = {"ram":85.0,"cpu":90.0,"gpu_temp":85.0,"vram":90.0}
         self._profile   = "Normal"
         self._standby_win = None
-        self._cpu_samples = deque(maxlen=1200)
+        self._cpu_samples = deque(maxlen=MAX_CPU_SAMPLES_HISTORY)
         self._last_optimization = None
         self._focus_running = False
         self._focus_remaining = 0
@@ -429,16 +434,13 @@ class App(ctk.CTk):
         self._save_state()
 
     def _notify(self, title, message):
-        safe_title = str(title).replace("'", "''")
-        safe_message = str(message).replace("'", "''")
-        ps = (f"Add-Type -AssemblyName System.Windows.Forms;"
-              f"$n=New-Object System.Windows.Forms.NotifyIcon;"
-              f"$n.Icon=[System.Drawing.SystemIcons]::Information;$n.Visible=$true;"
-              f"$n.ShowBalloonTip(7000,'{safe_title}','{safe_message}',"
-              f"[System.Windows.Forms.ToolTipIcon]::Info);Start-Sleep 8;$n.Dispose()")
-        threading.Thread(target=lambda: subprocess.run(
-            ["powershell", "-WindowStyle", "Hidden", "-Command", ps], capture_output=True
-        ), daemon=True).start()
+        ps = ("param($t,$m) Add-Type -AssemblyName System.Windows.Forms;"
+              "$n=New-Object System.Windows.Forms.NotifyIcon;"
+              "$n.Icon=[System.Drawing.SystemIcons]::Information;$n.Visible=$true;"
+              "$n.ShowBalloonTip(7000,$t,$m,[System.Windows.Forms.ToolTipIcon]::Info);"
+              "Start-Sleep 8;$n.Dispose()")
+        cmd = ["powershell", "-WindowStyle", "Hidden", "-Command", ps, str(title), str(message)]
+        threading.Thread(target=lambda: subprocess.run(cmd, capture_output=True), daemon=True).start()
 
     def _risk_meta(self, risk):
         if risk == "Safe":
@@ -1148,7 +1150,7 @@ class App(ctk.CTk):
         now = time.time()
         vals = [v for ts, v in self._cpu_samples if (now - ts) <= minutes * 60]
         if not vals:
-            vals = list(self._h_cpu)[-20:]
+            vals = list(self._h_cpu)[-FALLBACK_CPU_SAMPLE_COUNT:]
         return (sum(vals) / max(len(vals), 1)) if vals else 0.0
 
     def _run_cpu_optimize(self, mode, initiated_by_focus=False):
@@ -1242,13 +1244,13 @@ class App(ctk.CTk):
                 if not nm or self._is_system_critical(nm):
                     continue
                 rss = (p.info["memory_info"].rss / 1048576.0) if p.info.get("memory_info") else 0.0
-                if rss < MIN_BACKGROUND_APP_MB and "update" not in nm.lower() and "launcher" not in nm.lower():
+                if rss < MIN_BACKGROUND_APP_MB and not any(h in nm.lower() for h in BACKGROUND_NAME_HINTS):
                     continue
                 items.append({"pid": p.info["pid"], "name": nm, "ram": rss})
             except Exception:
                 pass
         items.sort(key=lambda x: x["ram"], reverse=True)
-        return items[:40]
+        return items[:MAX_BACKGROUND_APP_DISPLAY]
 
     def _refresh_background_apps(self):
         if not hasattr(self, "_bg_list"):
@@ -1267,7 +1269,7 @@ class App(ctk.CTk):
             row.pack(fill="x", pady=2)
             name = app["name"]
             friendly = self._friendly_name(name)
-            ctk.CTkLabel(row, text=friendly[:28], width=220, anchor="w", text_color=TEXT).pack(side="left", padx=(10, 2), pady=10)
+            ctk.CTkLabel(row, text=friendly[:MAX_APP_NAME_DISPLAY_LENGTH], width=220, anchor="w", text_color=TEXT).pack(side="left", padx=(10, 2), pady=10)
             ctk.CTkLabel(row, text=f"{app['ram']:.0f} MB", width=70, text_color=MUTED).pack(side="left")
             if name.lower() in whitelist:
                 ctk.CTkLabel(row, text="Always allowed", text_color=GREEN, width=100).pack(side="left", padx=2)
