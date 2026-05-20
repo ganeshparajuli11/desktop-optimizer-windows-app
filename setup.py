@@ -12,7 +12,7 @@ setup(
     install_requires=[
         "customtkinter>=5.2.0",
         "psutil>=5.9.0",
-        "pynvml>=11.5.0",
+        "nvidia-ml-py>=12.0.0",
     ],
     entry_points={
         "console_scripts": [

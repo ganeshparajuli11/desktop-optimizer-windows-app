@@ -1,7 +1,7 @@
 # encoding: utf-8
 # SysCtl v3 - Windows System Control Center
 # Open Source | github.com/yourname/sysctl
-# pip install customtkinter psutil pynvml
+# pip install customtkinter psutil nvidia-ml-py
 
 import os, gc, threading, time, tempfile, shutil, subprocess, math
 import tkinter as tk
@@ -514,7 +514,7 @@ class App(ctk.CTk):
         ctk.CTkLabel(tab,text=GPU_NAME,
                      font=ctk.CTkFont("Segoe UI",16,"bold"),text_color=ORANGE).pack(pady=(14,10))
         if not GPU_OK:
-            ctk.CTkLabel(tab,text="Install pynvml: pip install pynvml",text_color=MUTED).pack(); return
+            ctk.CTkLabel(tab,text="Install NVML bindings: pip install nvidia-ml-py",text_color=MUTED).pack(); return
         g=ctk.CTkFrame(tab,fg_color="transparent"); g.pack(fill="x",padx=16,pady=4)
         g.columnconfigure((0,1,2,3),weight=1)
         self._gpu_w={}

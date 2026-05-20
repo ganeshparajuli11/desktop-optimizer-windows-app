@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-blue?style=for-the-badge&logo=python)](https://python.org)
 
 A powerful, modern open-source system monitor and optimizer for Windows.
-Built with Python + CustomTkinter. RTX GPU support via pynvml.
+Built with Python + CustomTkinter. RTX GPU support via NVIDIA NVML Python bindings.
 
 ---
 
@@ -53,7 +53,7 @@ Built with Python + CustomTkinter. RTX GPU support via pynvml.
 ```bash
 git clone https://github.com/ganeshparajuli11/desktop-optimizer-windows-app.git
 cd desktop-optimizer-windows-app
-pip install customtkinter psutil pynvml
+pip install customtkinter psutil nvidia-ml-py
 python sysctl.py
 ```
 
@@ -107,7 +107,7 @@ Requires Docker Desktop installed and running. Shows live CPU/memory per contain
 
 ```bash
 # Install build tools
-pip install pyinstaller customtkinter psutil pynvml
+pip install pyinstaller customtkinter psutil nvidia-ml-py
 
 # Build (uses sysctl.spec — includes UAC manifest)
 build_exe.bat
