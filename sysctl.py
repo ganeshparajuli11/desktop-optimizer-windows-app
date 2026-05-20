@@ -76,7 +76,7 @@ class MiniGraph(tk.Canvas):
         poly = []
         for x,y in zip(xs,ys): poly += [x,y]
         poly += [xs[-1], H, xs[0], H]
-        self.create_polygon(poly, fill=self.color+"28", outline="")
+        self.create_polygon(poly, fill=self._alpha_fill_color(), outline="")
         pts = []
         for x,y in zip(xs,ys): pts += [x,y]
         if len(pts) >= 4:
@@ -84,6 +84,28 @@ class MiniGraph(tk.Canvas):
         self.create_text(W-6, pad+2, text=f"{self.data[-1]:.0f}",
                          anchor="ne", fill=self.color,
                          font=("Segoe UI", 9, "bold"))
+
+    def _alpha_fill_color(self):
+        return self._blend_hex(self.color, self.cget("bg"), 0.16)
+
+    @staticmethod
+    def _blend_hex(fg, bg, alpha):
+        def _hex_to_rgb(v):
+            if not isinstance(v, str) or len(v) != 7 or not v.startswith("#"):
+                return None
+            try:
+                return tuple(int(v[i:i+2], 16) for i in (1, 3, 5))
+            except ValueError:
+                return None
+
+        fg_rgb = _hex_to_rgb(fg)
+        bg_rgb = _hex_to_rgb(bg)
+        if not fg_rgb or not bg_rgb:
+            return fg
+
+        a = max(0.0, min(1.0, float(alpha)))
+        blend = tuple(round((c * a) + (b * (1.0 - a))) for c, b in zip(fg_rgb, bg_rgb))
+        return "#{:02x}{:02x}{:02x}".format(*blend)
 
 
 # ══════════════════════════════════════════════

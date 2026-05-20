@@ -1,0 +1,44 @@
+name: Verify SysCtl
+
+on:
+  push:
+    branches:
+      - main
+      - "copilot/**"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run verification checks
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            echo "Running python compile checks..."
+            python -m py_compile sysctl.py
+            echo "Verification complete."
+          } 2>&1 | tee verify.log
+
+      - name: Upload verification log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-log
+          path: verify.log
