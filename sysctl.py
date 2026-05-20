@@ -60,15 +60,19 @@ HIGH_IMPACT = "#ff6b6b"
 HISTORY       = 90
 MAX_ROWS      = 60
 ALERT_COOL    = 60
-APP_STATE_DIR_NAME = "SysCtl"
+APP_STATE_DIR_NAME = "sysctl"
 MAX_CPU_SAMPLES_HISTORY = 1200
 FALLBACK_CPU_SAMPLE_COUNT = 20
 MIN_BACKGROUND_APP_MB = 40
 MAX_BACKGROUND_APP_DISPLAY = 40
 MAX_APP_NAME_DISPLAY_LENGTH = 28
-BACKGROUND_NAME_HINTS = ["update", "launcher"]
+BACKGROUND_APP_KEYWORDS = ["update", "launcher"]
 MAX_DAILY_CPU_SAMPLES = 800
+DAILY_CPU_SAMPLE_INTERVAL_SEC = 10
 STATE_FLUSH_INTERVAL_SEC = 45
+BACKGROUND_REFRESH_INTERVAL_SEC = 30
+CPU_STABILITY_STABLE_STDDEV = 8
+CPU_STABILITY_MODERATE_STDDEV = 15
 CPU_OPT_PRESET_APPS = ["discord", "spotify", "steam", "epic"]
 BG_PRESETS = {
     "Work Focus": ["discord", "telegram", "slack", "steam", "epic"],
@@ -300,6 +304,7 @@ class App(ctk.CTk):
         self._disk_time = 0
         self._last_bg_refresh = 0.0
         self._last_state_flush = 0.0
+        self._last_daily_cpu_sample = 0.0
         self._alerts    = AlertManager()
         self._thr       = {"ram":85.0,"cpu":90.0,"gpu_temp":85.0,"vram":90.0}
         self._profile   = "Normal"
@@ -312,7 +317,8 @@ class App(ctk.CTk):
         self._last_assistant_undo = None
         self._safe_system_names = {
             "system", "registry", "smss.exe", "csrss.exe", "wininit.exe", "services.exe",
-            "lsass.exe", "svchost.exe", "explorer.exe", "winlogon.exe", "dwm.exe", "taskhostw.exe"
+            "lsass.exe", "svchost.exe", "explorer.exe", "winlogon.exe", "dwm.exe",
+            "taskhostw.exe", "fontdrvhost.exe", "runtimebroker.exe"
         }
         self._friendly_names = {
             "onedrive.exe": "Microsoft OneDrive", "discord.exe": "Discord", "spotify.exe": "Spotify",
@@ -326,7 +332,6 @@ class App(ctk.CTk):
         self._state = self._default_state()
         self._load_state()
         self._apply_state_vars()
-        self._apply_startup_blocklist()
 
         self._live_stats = {"cpu":"--","ram":"--","gpu":"--","vram":"--","net":"--"}
 
@@ -429,7 +434,7 @@ class App(ctk.CTk):
             "focus_minutes": 0,
             "apps_closed": 0,
             "cpu_samples": [],
-            "summary_sentence": "A new day started. Ready when you are.",
+            "summary_sentence": "A new day has started. Ready when you are.",
         }
         self._save_state()
 
@@ -1244,7 +1249,8 @@ class App(ctk.CTk):
                 if not nm or self._is_system_critical(nm):
                     continue
                 rss = (p.info["memory_info"].rss / 1048576.0) if p.info.get("memory_info") else 0.0
-                if rss < MIN_BACKGROUND_APP_MB and not any(h in nm.lower() for h in BACKGROUND_NAME_HINTS):
+                nm_lower = nm.lower()
+                if rss < MIN_BACKGROUND_APP_MB and not any(h in nm_lower for h in BACKGROUND_APP_KEYWORDS):
                     continue
                 items.append({"pid": p.info["pid"], "name": nm, "ram": rss})
             except Exception:
@@ -1320,11 +1326,20 @@ class App(ctk.CTk):
         blocked.add(proc_name.lower())
         settings["bg_startup_blocklist"] = sorted(blocked)
         self._save_state()
-        self._apply_startup_blocklist()
-        self._bg_status.configure(text=f"{self._friendly_name(proc_name)} will be blocked on startup where possible.")
+        def apply_block():
+            self._apply_startup_blocklist({proc_name.lower()})
+            self._bg_status.configure(text=f"{self._friendly_name(proc_name)} will be blocked on startup where possible.")
+        self._show_explain_dialog(
+            "Stop on startup",
+            f"Remove startup entries related to {self._friendly_name(proc_name)}.",
+            "This app should stop auto-launching on Windows startup.",
+            "Needs Admin",
+            apply_block,
+            needs_admin=True,
+        )
 
-    def _apply_startup_blocklist(self):
-        blocked = set(self._state.get("settings", {}).get("bg_startup_blocklist", []))
+    def _apply_startup_blocklist(self, blocked=None):
+        blocked = set(blocked or self._state.get("settings", {}).get("bg_startup_blocklist", []))
         if not blocked:
             return
         try:
@@ -1512,6 +1527,10 @@ class App(ctk.CTk):
 
     def _record_daily_cpu(self, value):
         self._rollover_daily_if_needed()
+        now = time.time()
+        if now - self._last_daily_cpu_sample < DAILY_CPU_SAMPLE_INTERVAL_SEC:
+            return
+        self._last_daily_cpu_sample = now
         daily = self._state.setdefault("daily_summary", {})
         samples = daily.setdefault("cpu_samples", [])
         samples.append(float(value))
@@ -1524,9 +1543,9 @@ class App(ctk.CTk):
         if len(samples) < 8:
             return "Collecting data"
         stdev = statistics.pstdev(samples)
-        if stdev < 8:
+        if stdev < CPU_STABILITY_STABLE_STDDEV:
             return "Stable"
-        if stdev < 15:
+        if stdev < CPU_STABILITY_MODERATE_STDDEV:
             return "Moderate"
         return "Spiky"
 
@@ -1565,7 +1584,8 @@ class App(ctk.CTk):
                 self._refresh_diskio()
                 if GPU_OK: self._refresh_gpu()
                 now = time.time()
-                if now - self._last_bg_refresh > 10:
+                current_tab = self._tabs.get() if hasattr(self, "_tabs") else ""
+                if current_tab == "Background Apps" and now - self._last_bg_refresh > BACKGROUND_REFRESH_INTERVAL_SEC:
                     self._last_bg_refresh = now
                     self.after(0, self._refresh_background_apps)
                 if now - self._last_state_flush > STATE_FLUSH_INTERVAL_SEC:

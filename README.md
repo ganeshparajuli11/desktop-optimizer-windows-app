@@ -177,7 +177,7 @@ SysCtl needs admin access to:
 It does **not** send any data anywhere. All operations are local.
 
 ### Data persistence
-SysCtl stores local JSON state under Windows user AppData (`%APPDATA%\\SysCtl\\sysctl_state.json`) for:
+SysCtl stores local JSON state under Windows user AppData (`%APPDATA%\sysctl\sysctl_state.json`) for:
 - Safe settings and defaults
 - Background app whitelist/startup blocklist
 - CPU optimizer history for undo/results
