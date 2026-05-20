@@ -38,6 +38,12 @@ Built with Python + CustomTkinter. RTX GPU support via pynvml.
 | Smart Alerts | Windows notifications when RAM/CPU/GPU thresholds exceeded |
 | Startup Manager | View and remove startup apps from registry + startup folder |
 | Quick Actions | Free RAM, Clean Temp, Flush DNS, Kill RAM Hogs |
+| Beginner CPU Optimizer | Safe/Balanced/Aggressive with explain mode, result card, and undo |
+| Background Apps | Safe one-click stop controls, startup blocklist, always-allow whitelist, presets |
+| Focus Hub | 25/45/60 min focus sessions, optional break sound, completion notification |
+| Unified Home | Plain-language health cards for CPU/RAM/Temp/Battery/Network with details toggle |
+| Smart Assistant | One-click actions: “My PC is slow”, “Prepare for meeting”, “Battery rescue” |
+| Daily Summary | Focus minutes, apps closed count, CPU stability trend, simple daily sentence |
 
 ---
 
@@ -98,6 +104,41 @@ The `.exe` automatically requests admin permission on launch via UAC. If you run
 | Battery Saver | Power Saver plan, kills heavy background apps |
 | Normal | Resets everything to defaults |
 
+### CPU Optimizer (Beginner-friendly)
+- Open **CPU Optimizer**
+- Keep mode on **Safe** (default) for everyday use
+- Click **Optimize CPU Now**
+- Review:
+  - CPU before optimization
+  - CPU after optimization
+  - 5-minute average comparison
+- Use **Undo Last Optimization** to restore previous power settings where possible
+
+### Background Apps
+- Open **Background Apps**
+- Review running heavy/tray-like apps with friendly names
+- Actions:
+  - **Stop now**
+  - **Stop on startup**
+  - **Keep always allowed**
+- Presets:
+  - **Work Focus**
+  - **Gaming Focus**
+  - **Battery Saver**
+
+### Focus Hub
+- Open **Focus Hub**
+- Start a **25 / 45 / 60 min** focus timer
+- Optional:
+  - **Play break reminder sound**
+  - **Start Focus with Safe CPU Optimize**
+- On session end, SysCtl shows a Windows notification
+
+### Home + Daily Summary
+- **Home** tab shows beginner-friendly Good/Warning/Critical cards
+- Use **Show details** for extra metrics
+- **Daily Summary** shows focus time, closed apps count, CPU stability trend, and a plain summary line
+
 ### Docker Monitor
 Requires Docker Desktop installed and running. Shows live CPU/memory per container with stop/restart/logs buttons. Docker stats refresh every 8 seconds in their own thread so they never lag the rest of the app.
 
@@ -131,8 +172,38 @@ SysCtl needs admin access to:
 - Kill system-level processes
 - Switch Windows power plans
 - Apply GPU performance registry tweaks
+- Apply some Balanced/Aggressive or profile-level performance tuning
 
 It does **not** send any data anywhere. All operations are local.
+
+### Data persistence
+SysCtl stores local JSON state under Windows user AppData (`%APPDATA%\\SysCtl\\sysctl_state.json`) for:
+- Safe settings and defaults
+- Background app whitelist/startup blocklist
+- CPU optimizer history for undo/results
+- Daily summary counters
+
+If JSON becomes corrupted, SysCtl resets safely and keeps a `.corrupt.json` backup.
+
+---
+
+## Manual test steps for new features
+
+1. Launch SysCtl and verify tabs exist: **Home**, **CPU Optimizer**, **Background Apps**, **Focus Hub**, **Assistant**, **Daily Summary**
+2. In **CPU Optimizer**, run **Safe** mode and verify before/after/5-minute result text updates
+3. Run **Balanced/Aggressive** and verify Explain dialog + risk label appears before applying
+4. Click **Undo Last Optimization** and verify undo status message appears
+5. In **Background Apps**, verify:
+   - critical system apps are not killable
+   - Stop now handles access errors with safe fallback text
+   - Stop on startup and Keep always allowed persist after restart
+6. Apply each preset (Work/Gaming/Battery) and verify closed app count/status updates
+7. In **Focus Hub**, start 25 min session, confirm timer starts; stop manually and restart
+8. Enable break sound + notification, set a short test session by editing timer during development and verify end notification/sound
+9. In **Assistant**, run each one-click action and verify explain text + expected result + undo button behavior
+10. In **Home**, toggle **Show details** and verify plain cards update (Good/Warning/Critical)
+11. In **Daily Summary**, confirm focus minutes, apps closed, CPU stability trend, and summary sentence update
+12. Close and reopen app; confirm JSON-backed settings and summary values are retained
 
 ---
 
