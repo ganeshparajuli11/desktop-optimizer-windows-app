@@ -38,6 +38,6 @@ jobs:
         run: |
           .\.venv\Scripts\python -m py_compile sysctl.py setup.py
 
-      - name: Fail on NVML deprecation warnings
+      - name: Validate NVML package selection
         run: |
-          .\.venv\Scripts\python -W error::FutureWarning -c "import pynvml; print('NVML import check passed')"
+          .\.venv\Scripts\python -c "import importlib.metadata as md; names={dist.metadata['Name'].lower() for dist in md.distributions()}; assert 'nvidia-ml-py' in names, 'nvidia-ml-py is missing'; assert 'pynvml' not in names, 'deprecated pynvml package installed'; print('NVML dependency check passed')"
