@@ -3,7 +3,7 @@
 # Open Source | github.com/yourname/sysctl
 # pip install customtkinter psutil pynvml
 
-import os, gc, threading, time, tempfile, shutil, subprocess, math, json, statistics
+import os, gc, threading, time, tempfile, shutil, subprocess, math, json, statistics, re
 import tkinter as tk
 from pathlib import Path
 from datetime import datetime, timedelta
@@ -69,7 +69,7 @@ MAX_APP_NAME_DISPLAY_LENGTH = 28
 BACKGROUND_APP_KEYWORDS = ["update", "launcher"]
 MAX_DAILY_CPU_SAMPLES = 800
 DAILY_CPU_SAMPLE_INTERVAL_SEC = 10
-STATE_FLUSH_INTERVAL_SEC = 45
+STATE_FLUSH_INTERVAL_SEC = 15
 BACKGROUND_REFRESH_INTERVAL_SEC = 30
 CPU_STABILITY_STABLE_STDDEV = 8
 CPU_STABILITY_MODERATE_STDDEV = 15
@@ -1155,7 +1155,11 @@ class App(ctk.CTk):
         now = time.time()
         vals = [v for ts, v in self._cpu_samples if (now - ts) <= minutes * 60]
         if not vals:
-            vals = list(self._h_cpu)[-FALLBACK_CPU_SAMPLE_COUNT:]
+            vals = []
+            for v in reversed(self._h_cpu):
+                vals.append(v)
+                if len(vals) >= FALLBACK_CPU_SAMPLE_COUNT:
+                    break
         return (sum(vals) / max(len(vals), 1)) if vals else 0.0
 
     def _run_cpu_optimize(self, mode, initiated_by_focus=False):
@@ -1171,9 +1175,9 @@ class App(ctk.CTk):
                 changed.append("Adjusted power plan for performance")
             if mode == "Aggressive":
                 closed = self._stop_background_group(CPU_OPT_PRESET_APPS, silent=True)
+                self._add_daily_apps_closed(closed)
                 if closed:
                     changed.append(f"Closed {closed} heavy background app(s)")
-                    self._add_daily_apps_closed(closed)
         except Exception as e:
             self._status(f"Optimization fallback used: {e}")
         after = psutil.cpu_percent(interval=0.4)
@@ -1340,15 +1344,19 @@ class App(ctk.CTk):
 
     def _apply_startup_blocklist(self, blocked=None):
         blocked = set(blocked or self._state.get("settings", {}).get("bg_startup_blocklist", []))
+        blocked = {b if b.endswith(".exe") else f"{b}.exe" for b in blocked}
         if not blocked:
             return
         try:
+            removed = 0
             folder = Path(os.environ.get("APPDATA", "")) / "Microsoft/Windows/Start Menu/Programs/Startup"
             if folder.exists():
                 for f in folder.iterdir():
-                    if any(b in f.name.lower() for b in blocked):
+                    stem = f.stem.lower()
+                    if f.name.lower() in blocked or f"{stem}.exe" in blocked:
                         try:
                             f.unlink()
+                            removed += 1
                         except Exception:
                             pass
             if WINREG_OK:
@@ -1364,7 +1372,8 @@ class App(ctk.CTk):
                     while True:
                         try:
                             n, v, _ = winreg.EnumValue(k, i)
-                            if any(b in n.lower() or b in str(v).lower() for b in blocked):
+                            value_exe = self._extract_exe_from_command(str(v))
+                            if value_exe in blocked or n.lower() in blocked:
                                 to_delete.append(n)
                             i += 1
                         except OSError:
@@ -1372,14 +1381,24 @@ class App(ctk.CTk):
                     for n in to_delete:
                         try:
                             winreg.DeleteValue(k, n)
+                            removed += 1
                         except Exception:
                             pass
                     try:
                         winreg.CloseKey(k)
                     except Exception:
                         pass
+            if hasattr(self, "_bg_status"):
+                self._bg_status.configure(text=f"Startup cleanup complete: removed {removed} matching startup item(s).")
         except Exception:
             pass
+
+    def _extract_exe_from_command(self, cmd):
+        if not cmd:
+            return ""
+        text = cmd.strip().strip('"').lower()
+        m = re.search(r'([a-z0-9_\-\.]+\.exe)', text)
+        return m.group(1) if m else ""
 
     def _stop_background_group(self, keywords, silent=False):
         count = 0
@@ -1436,11 +1455,14 @@ class App(ctk.CTk):
             self._focus_running = False
             self._focus_state_lbl.configure(text="Focus session complete", text_color=TEAL)
             self._notify("SysCtl Focus", "Focus session complete. Time for a short break.")
-            if self._focus_break_sound_var.get() and winsound:
-                try:
-                    winsound.MessageBeep(winsound.MB_ICONASTERISK)
-                except Exception:
-                    pass
+            if self._focus_break_sound_var.get():
+                if winsound:
+                    try:
+                        winsound.MessageBeep(winsound.MB_ICONASTERISK)
+                    except Exception:
+                        self._status("Break sound could not be played.")
+                else:
+                    self._status("Break sound not available on this system.")
             self._add_daily_focus_minutes(self._focus_target_minutes)
             return
         self._focus_remaining -= 1
@@ -2080,7 +2102,6 @@ class App(ctk.CTk):
     def on_close(self):
         self._alive=False
         self._sync_ui_settings()
-        self._save_state()
         self.destroy()
 
 
