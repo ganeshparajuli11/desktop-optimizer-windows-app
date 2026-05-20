@@ -27,13 +27,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m venv .venv
+          .\.venv\Scripts\python -m pip install --upgrade pip
+          .\.venv\Scripts\pip install -r requirements.txt
 
       - name: Validate syntax
         run: |
-          python -m py_compile sysctl.py setup.py
+          .\.venv\Scripts\python -m py_compile sysctl.py setup.py
 
       - name: Fail on NVML deprecation warnings
         run: |
-          python -W error::FutureWarning -c "import pynvml; print('NVML import check passed')"
+          .\.venv\Scripts\python -W error::FutureWarning -c "import pynvml; print('NVML import check passed')"
