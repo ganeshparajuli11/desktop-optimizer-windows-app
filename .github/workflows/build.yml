@@ -1,0 +1,81 @@
+name: Build & Release SysCtl.exe
+
+on:
+  push:
+    tags:
+      - "v*.*.*"          # triggers on: git tag v1.0.0 && git push --tags
+  workflow_dispatch:       # allows manual trigger from GitHub Actions tab
+
+permissions:
+  contents: write          # needed to create GitHub Releases
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install customtkinter psutil pynvml pyinstaller
+
+      - name: Build SysCtl.exe
+        run: |
+          pyinstaller sysctl.spec
+
+      - name: Verify build output
+        run: |
+          dir dist\
+          echo "Build complete!"
+
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "SysCtl ${{ steps.version.outputs.VERSION }}"
+          tag_name: ${{ github.ref_name }}
+          body: |
+            ## SysCtl ${{ steps.version.outputs.VERSION }} — Windows System Control Center
+
+            ### Download & Run
+            1. Click **SysCtl.exe** below
+            2. Run it — Windows will ask for **admin permission** (needed for startup management & system optimization)
+            3. That's it. No install, no Python required.
+
+            ### What's included
+            - Live Process Manager (no-flicker, kill any process)
+            - Real-time Network Monitor with history graphs
+            - Disk I/O Monitor per drive and per process
+            - RTX GPU Monitor (load, VRAM, temp, power)
+            - Docker Container Monitor
+            - StandBy Fullscreen Clock for second monitor
+            - Gaming / Dev / Battery profiles
+            - Smart RAM/CPU/GPU alerts
+            - Startup App Manager
+            - Quick Actions (free RAM, flush DNS, clean temp)
+
+            ### Requirements
+            - Windows 10 / 11
+            - NVIDIA GPU optional (GPU tab hidden if not present)
+            - Docker optional (Docker tab shows status if not installed)
+
+            ### Run from source
+            ```
+            pip install customtkinter psutil pynvml
+            python sysctl.py
+            ```
+          files: dist/SysCtl.exe
+          draft: false
+          prerelease: false
